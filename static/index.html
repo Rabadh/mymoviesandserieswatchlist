@@ -396,6 +396,50 @@ render();
   input.value = "";
   toast("Added: " + title);
 }
+ const suggestionBox = document.createElement('div');
+suggestionBox.style.position = 'absolute';
+suggestionBox.style.background = 'var(--surface)';
+suggestionBox.style.border = '1px solid var(--border)';
+suggestionBox.style.maxHeight = '200px';
+suggestionBox.style.overflowY = 'auto';
+suggestionBox.style.zIndex = '100';
+suggestionBox.style.width = '200px';
+suggestionBox.style.display = 'none';
+document.body.appendChild(suggestionBox);
+
+const newTitleInput = document.getElementById('newTitle');
+newTitleInput.addEventListener('input', async () => {
+  const query = newTitleInput.value.trim();
+  if (!query) { suggestionBox.style.display = 'none'; return; }
+
+  try {
+    const res = await fetch('/api/fetch-info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: query })
+    });
+    const data = await res.json();
+    if (!data.found) { suggestionBox.style.display = 'none'; return; }
+
+    suggestionBox.innerHTML = `<div style="padding:5px;cursor:pointer;">${data.title}</div>`;
+    suggestionBox.style.display = 'block';
+    const rect = newTitleInput.getBoundingClientRect();
+    suggestionBox.style.top = rect.bottom + window.scrollY + 'px';
+    suggestionBox.style.left = rect.left + window.scrollX + 'px';
+
+    // Click to select
+    suggestionBox.querySelector('div').onclick = () => {
+      newTitleInput.value = data.title;
+      suggestionBox.style.display = 'none';
+    };
+  } catch(e) {
+    suggestionBox.style.display = 'none';
+  }
+});
+
+document.addEventListener('click', e => {
+  if (e.target !== newTitleInput) suggestionBox.style.display = 'none';
+});
 </script>
 </body>
 </html>
