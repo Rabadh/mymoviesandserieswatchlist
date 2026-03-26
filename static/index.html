@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Watchlist</title>
+<title>Rabadh's Watchlist</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -151,6 +151,8 @@
 
 <div class="controls">
   <input type="text" id="search" placeholder="Search…" oninput="render()">
+  <input type="text" id="newTitle" placeholder="Add new title…">
+  <button class="filter-btn" onclick="addTitle()">Add</button>
   <button class="filter-btn on" onclick="setFilter('all',this)">All</button>
   <button class="filter-btn" onclick="setFilter('watched',this)">Watched</button>
   <button class="filter-btn" onclick="setFilter('pending',this)">Pending</button>
@@ -166,7 +168,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const TITLES = [
+let TITLES = [
   "100 Years of Solitude","A House of Dynamite","Amazon Jail","Ascendence of a Bookworm",
   "Atlanta","Band of Brothers","Better Call Saul","Black Mirror","Caligula","Castlevania",
   "Centerfold Girls","Civil War","Clarkson's Farm","Dark Matter","Deep Cover","Demon Slayer",
@@ -183,6 +185,12 @@ const TITLES = [
   "True Detective (Season 1)","Tulsa King","Turn: Washington's Spies","U Forgotten","Under the Skin",
   "Until I Kill You","Veep","War on Rohirrim"
 ];
+
+ // Load extra titles from storage
+try {
+  const extra = JSON.parse(localStorage.getItem('extra_titles') || '[]');
+  TITLES = [...new Set([...TITLES, ...extra])];
+} catch(e) {}
 
 let state = {};
 try { const s = localStorage.getItem('watchlist_v2'); if (s) state = JSON.parse(s); } catch(e) {}
@@ -352,7 +360,42 @@ if (missing.length) {
   document.getElementById('fab').textContent = 'Loading…';
   fetchAll(missing);
 }
+ 
 render();
+
+ function addTitle() {
+  const input = document.getElementById('newTitle');
+  const title = input.value.trim();
+
+  if (!title) return;
+
+  if (TITLES.includes(title)) {
+    toast("Already exists");
+    return;
+  }
+
+  // Add to list
+  TITLES.push(title);
+
+  // Save separately (so originals stay clean)
+  try {
+    const extra = JSON.parse(localStorage.getItem('extra_titles') || '[]');
+    extra.push(title);
+    localStorage.setItem('extra_titles', JSON.stringify(extra));
+  } catch(e) {}
+
+  // Initialize state
+  state[title] = { watched: false, info: null };
+
+  save();
+  render();
+
+  // Auto-fetch info
+  fetchOne(title);
+
+  input.value = "";
+  toast("Added: " + title);
+}
 </script>
 </body>
 </html>
