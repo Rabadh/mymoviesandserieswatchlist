@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Watchlist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d14;
+    --surface: #111118;
+    --border: #1e1e2a;
+    --border-light: #14141c;
+    --text: #e0ddd6;
+    --text-muted: #666;
+    --text-dim: #2e2e3a;
+    --gold: #c8971a;
+    --gold-light: #f5c518;
+    --green: #4caf50;
+  }
+
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; min-height: 100vh; }
+
+  .header { padding: 20px 24px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .logo { font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: 3px; color: var(--gold-light); line-height: 1; }
+  .logo span { color: var(--text); }
+  .stats { display: flex; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 5px 14px; text-align: center; }
+  .stat-n { font-family: 'Bebas Neue', sans-serif; font-size: 22px; line-height: 1; }
+  .stat-n.gold { color: var(--gold); }
+  .stat-n.green { color: var(--green); }
+  .stat-l { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+
+  .prog-wrap { height: 2px; background: var(--border); }
+  .prog-bar { height: 100%; background: var(--gold); transition: width 0.4s; width: 0%; }
+
+  .controls {
+    padding: 10px 24px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; background: var(--bg);
+  }
+  input[type=text] {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 3px;
+    padding: 7px 12px; color: var(--text); font-family: 'DM Sans', sans-serif;
+    font-size: 13px; width: 180px; outline: none; transition: border-color 0.2s;
+  }
+  input[type=text]:focus { border-color: var(--gold); }
+  input[type=text]::placeholder { color: #2e2e3a; }
+  select {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 3px;
+    padding: 7px 10px; color: var(--text-muted); font-family: 'DM Sans', sans-serif; font-size: 12px; outline: none; cursor: pointer;
+  }
+  .filter-btn {
+    padding: 7px 14px; border-radius: 3px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer; transition: all 0.15s;
+  }
+  .filter-btn.on { background: var(--gold); color: #0d0d14; border-color: var(--gold); font-weight: 500; }
+  .reload-btn {
+    margin-left: auto; padding: 7px 16px; background: var(--gold); color: #0d0d14;
+    border: none; border-radius: 3px; font-family: 'Bebas Neue', sans-serif;
+    font-size: 14px; letter-spacing: 1px; cursor: pointer; transition: opacity 0.2s;
+  }
+  .reload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .section-head {
+    padding: 10px 24px 7px; font-size: 11px; font-weight: 500; letter-spacing: 1.5px;
+    text-transform: uppercase; color: var(--text-muted);
+    border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px;
+  }
+  .section-count { font-weight: 400; color: #2e2e3a; }
+
+  .col-head {
+    display: grid;
+    grid-template-columns: 28px 44px minmax(0,1fr) 90px minmax(0,150px) 80px 80px;
+    gap: 10px; padding: 6px 24px;
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #2e2e3a;
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 28px 44px minmax(0,1fr) 90px minmax(0,150px) 80px 80px;
+    gap: 10px; padding: 5px 24px;
+    border-bottom: 1px solid var(--border-light);
+    align-items: center; transition: background 0.1s;
+  }
+  .row:hover { background: var(--surface); }
+  .row.watched { border-left: 2px solid var(--green); padding-left: 22px; }
+
+  .toggle {
+    width: 20px; height: 20px; border-radius: 50%;
+    border: 1.5px solid #333; background: transparent;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: #fff; transition: all 0.15s; flex-shrink: 0;
+  }
+  .toggle.on { background: var(--green); border-color: var(--green); }
+  .toggle:hover { border-color: var(--green); }
+
+  .poster-wrap { width: 32px; height: 46px; flex-shrink: 0; border-radius: 2px; overflow: hidden; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 14px; color: #2e2e3a; }
+  .poster-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  .title-cell { font-size: 13px; font-weight: 500; line-height: 1.35; min-width: 0; }
+  .title-cell span { display: block; white-space: normal; word-break: break-word; }
+  .title-year { font-size: 11px; color: var(--text-muted); font-weight: 300; }
+
+  .badge { font-size: 10px; padding: 2px 7px; border-radius: 2px; display: inline-block; }
+  .t-Movie      { background: #1a2010; color: #88aa44; }
+  .t-Series     { background: #1e1e2e; color: #8888cc; }
+  .t-Mini       { background: #1e1a2a; color: #9977cc; }
+  .t-Anime      { background: #2a1e10; color: #cc8833; }
+  .t-Documentary{ background: #0f2a1a; color: #44aa66; }
+  .t-Reality    { background: #2a1028; color: #bb55cc; }
+
+  .genres { font-size: 11px; color: var(--text-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .runtime { font-size: 12px; color: var(--text-muted); }
+  .rating-cell { display: flex; align-items: center; gap: 4px; }
+  .imdb-badge { background: var(--gold-light); color: #000; font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 2px; }
+  .rating-n { font-size: 13px; font-weight: 500; color: var(--gold); }
+  .dash { color: #2e2e3a; font-size: 12px; }
+
+  .dot { width: 4px; height: 4px; background: var(--gold); border-radius: 50%; display: inline-block; animation: blink 0.8s infinite; margin: 0 1px; }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%,100%{opacity:0.2;} 50%{opacity:1;} }
+
+  .empty { padding: 50px 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+  .toast {
+    position: fixed; bottom: 20px; right: 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text-muted); font-size: 12px; padding: 8px 16px;
+    border-radius: 4px; display: none; z-index: 100;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">My <span>Watchlist</span></div>
+  <div class="stats">
+    <div class="stat"><div class="stat-n" id="s-total">80</div><div class="stat-l">Total</div></div>
+    <div class="stat"><div class="stat-n green" id="s-watched">0</div><div class="stat-l">Watched</div></div>
+    <div class="stat"><div class="stat-n" id="s-pending">80</div><div class="stat-l">Pending</div></div>
+    <div class="stat"><div class="stat-n gold" id="s-loaded">0</div><div class="stat-l">Loaded</div></div>
+  </div>
+</div>
+<div class="prog-wrap"><div class="prog-bar" id="prog"></div></div>
+
+<div class="controls">
+  <input type="text" id="search" placeholder="Search…" oninput="render()">
+  <button class="filter-btn on" onclick="setFilter('all',this)">All</button>
+  <button class="filter-btn" onclick="setFilter('watched',this)">Watched</button>
+  <button class="filter-btn" onclick="setFilter('pending',this)">Pending</button>
+  <select id="sort" onchange="render()">
+    <option value="default">Default order</option>
+    <option value="alpha">A – Z</option>
+    <option value="rating">Top rated</option>
+  </select>
+  <button class="reload-btn" id="fab" onclick="refetchAll()">Reload info</button>
+</div>
+
+<div id="body"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const TITLES = [
+  "100 Years of Solitude","A House of Dynamite","Amazon Jail","Ascendence of a Bookworm",
+  "Atlanta","Band of Brothers","Better Call Saul","Black Mirror","Caligula","Castlevania",
+  "Centerfold Girls","Civil War","Clarkson's Farm","Dark Matter","Deep Cover","Demon Slayer",
+  "Detectorists","Devil May Cry","Devs","Dragon Keeper","Extrapolations","For All Mankind",
+  "Frieren","Full Metal Alchemist","Gangubhai Kathiawadi","Green Eggs and Ham","Heeramandi",
+  "He-Man","Inu Yasha","It's Always Sunny in Philadelphia","Jujutsu Kaisen","Justified",
+  "Knight of the Seven Kingdoms","Landman","Lifeforce","Mad Men","Maid","Masters of the Air",
+  "Mindhunter","MobLand","Murderbot","My Hero Academia","Nobody Wants This","Ozark",
+  "Pride and Prejudice (1995 BBC)","Re:Zero","Rutherford Falls","SAO (Sword Art Online)",
+  "Shameless","Shōgun","Slam Dunk","Slow Horses","Sons of Anarchy","Spy x Family","Squid Game",
+  "Star Trek: The Next Generation","Succession","Supernatural","The Bear","The Day of the Jackal",
+  "The Diplomat","The Gentleman","The Good Place","The Night Off","The Penguin","The Sopranos",
+  "The Traitors","The Unbreakable Boy","The West Wing","The White Lotus","The Wire","Time Bandits",
+  "True Detective (Season 1)","Tulsa King","Turn: Washington's Spies","U Forgotten","Under the Skin",
+  "Until I Kill You","Veep","War on Rohirrim"
+];
+
+let state = {};
+try { const s = localStorage.getItem('watchlist_v2'); if (s) state = JSON.parse(s); } catch(e) {}
+TITLES.forEach(t => { if (!state[t]) state[t] = { watched: false, info: null }; });
+function save() { try { localStorage.setItem('watchlist_v2', JSON.stringify(state)); } catch(e) {} }
+
+let activeFilter = 'all';
+let loadingSet = new Set();
+
+function isMovie(t) { return state[t].info?.type === 'Movie'; }
+function isTV(t) { return state[t].info && !isMovie(t); }
+
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  render();
+}
+
+function getFiltered() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const sort = document.getElementById('sort').value;
+  let list = TITLES.filter(t => {
+    if (q && !t.toLowerCase().includes(q)) return false;
+    if (activeFilter === 'watched' && !state[t].watched) return false;
+    if (activeFilter === 'pending' && state[t].watched) return false;
+    return true;
+  });
+  if (sort === 'alpha') list.sort((a,b) => a.localeCompare(b));
+  if (sort === 'rating') list.sort((a,b) => (state[b].info?.rating||0) - (state[a].info?.rating||0));
+  return list;
+}
+
+function updateStats() {
+  const watched = TITLES.filter(t => state[t].watched).length;
+  const loaded = TITLES.filter(t => state[t].info).length;
+  document.getElementById('s-total').textContent = TITLES.length;
+  document.getElementById('s-watched').textContent = watched;
+  document.getElementById('s-pending').textContent = TITLES.length - watched;
+  document.getElementById('s-loaded').textContent = loaded;
+  document.getElementById('prog').style.width = (loaded / TITLES.length * 100) + '%';
+}
+
+function typeBadge(type) {
+  if (!type) return '<span class="dash">—</span>';
+  const cls = { 'Movie':'t-Movie','Series':'t-Series','Mini-Series':'t-Mini','Anime':'t-Anime','Documentary':'t-Documentary','Reality':'t-Reality' };
+  return `<span class="badge ${cls[type]||'t-Series'}">${type}</span>`;
+}
+
+function posterCell(info) {
+  if (info?.poster) return `<div class="poster-wrap"><img src="${info.poster}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='▶'"></div>`;
+  return `<div class="poster-wrap">▶</div>`;
+}
+
+function colHeaders() {
+  return `<div class="col-head"><div></div><div>Poster</div><div>Title</div><div>Type</div><div>Genres</div><div>Runtime</div><div>IMDb</div></div>`;
+}
+
+function rowHTML(t) {
+  const s = state[t];
+  const info = s.info;
+  const loading = loadingSet.has(t);
+  const esc = encodeURIComponent(t);
+
+  const typeCell = loading ? `<span class="dot"></span><span class="dot"></span><span class="dot"></span>` : typeBadge(info?.type);
+  const genreCell = info?.genres?.length ? `<span class="genres">${info.genres.slice(0,2).join(', ')}</span>` : `<span class="dash">—</span>`;
+  const rtCell = info?.runtime ? `<span class="runtime">${info.runtime}</span>` : `<span class="dash">—</span>`;
+  const ratingCell = info?.rating ? `<div class="rating-cell"><span class="imdb-badge">IMDb</span><span class="rating-n">${info.rating}</span></div>` : `<span class="dash">—</span>`;
+  const titleYear = info?.year ? `<span class="title-year">${info.year}</span>` : '';
+
+  return `<div class="row ${s.watched?'watched':''}" id="r-${esc}">
+    <button class="toggle ${s.watched?'on':''}" onclick="toggleW('${esc}')">${s.watched?'✓':''}</button>
+    ${posterCell(info)}
+    <div class="title-cell"><span>${t}</span>${titleYear}</div>
+    <div>${typeCell}</div>
+    <div>${genreCell}</div>
+    <div>${rtCell}</div>
+    <div>${ratingCell}</div>
+  </div>`;
+}
+
+function render() {
+  const el = document.getElementById('body');
+  const list = getFiltered();
+  if (!list.length) { el.innerHTML = '<div class="empty">No titles match.</div>'; updateStats(); return; }
+
+  const movies  = list.filter(t => isMovie(t));
+  const tv      = list.filter(t => isTV(t));
+  const loading = list.filter(t => loadingSet.has(t));
+  const queued  = list.filter(t => !state[t].info && !loadingSet.has(t));
+
+  let html = '';
+  if (movies.length)  { html += `<div class="section-head">Movies <span class="section-count">${movies.length}</span></div>${colHeaders()}` + movies.map(rowHTML).join(''); }
+  if (tv.length)      { html += `<div class="section-head">TV &amp; Series <span class="section-count">${tv.length}</span></div>${colHeaders()}` + tv.map(rowHTML).join(''); }
+  if (loading.length) { html += `<div class="section-head">Loading… <span class="section-count">${loading.length}</span></div>${colHeaders()}` + loading.map(rowHTML).join(''); }
+  if (queued.length)  { html += `<div class="section-head">Queued <span class="section-count">${queued.length}</span></div>${colHeaders()}` + queued.map(rowHTML).join(''); }
+
+  el.innerHTML = html;
+  updateStats();
+}
+
+function toggleW(esc) {
+  const t = decodeURIComponent(esc);
+  state[t].watched = !state[t].watched;
+  save(); render();
+}
+
+function toast(msg, ms=3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.style.display = 'block';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.style.display = 'none', ms);
+}
+
+// Fetch one title at a time from /api/fetch-info
+async function fetchOne(title) {
+  loadingSet.add(title);
+  render();
+  try {
+    const res = await fetch('/api/fetch-info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title })
+    });
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    const data = await res.json();
+    state[title].info = data.found ? {
+      rating: data.rating,
+      genres: data.genres,
+      runtime: data.runtime,
+      type: data.type,
+      year: data.year,
+      poster: data.poster
+    } : { genres: [], rating: null, runtime: null, type: 'Series', year: '', poster: '' };
+  } catch(e) {
+    state[title].info = { genres: [], rating: null, runtime: null, type: null, year: '', poster: '' };
+  }
+  loadingSet.delete(title);
+  save(); render();
+}
+
+// Fetch all missing in parallel batches of 5
+async function fetchAll(titles) {
+  const BATCH = 5;
+  for (let i = 0; i < titles.length; i += BATCH) {
+    await Promise.all(titles.slice(i, i + BATCH).map(t => fetchOne(t)));
+  }
+  const fab = document.getElementById('fab');
+  fab.disabled = false;
+  fab.textContent = 'Reload info';
+}
+
+async function refetchAll() {
+  TITLES.forEach(t => { state[t].info = null; });
+  save();
+  const fab = document.getElementById('fab');
+  fab.disabled = true;
+  fab.textContent = 'Loading…';
+  render();
+  await fetchAll(TITLES);
+}
+
+// On load: fetch anything missing
+const missing = TITLES.filter(t => !state[t].info);
+if (missing.length) {
+  document.getElementById('fab').disabled = true;
+  document.getElementById('fab').textContent = 'Loading…';
+  fetchAll(missing);
+}
+render();
+</script>
+</body>
+</html>
