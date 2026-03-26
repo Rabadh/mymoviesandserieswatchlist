@@ -22,10 +22,9 @@ def safe_request(params):
     except requests.exceptions.RequestException:
         return None, "OMDB request failed"
 
-
 @app.route("/")
 def index():
-    return send_from_directory("static", "index.html")
+    return {"status": "API is running"}
 
 
 @app.route("/api/fetch-info", methods=["POST"])
