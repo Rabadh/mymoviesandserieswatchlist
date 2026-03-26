@@ -24,7 +24,7 @@ def safe_request(params):
 
 @app.route("/")
 def index():
-    return {"status": "API is running"}
+    return send_from_directory("static", "index.html")
 
 
 @app.route("/api/fetch-info", methods=["POST"])
