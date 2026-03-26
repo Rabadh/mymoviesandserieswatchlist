@@ -9,18 +9,67 @@ CORS(app)
 OMDB_API_KEY = os.environ.get("OMDB_API_KEY", "")
 
 
-def safe_request(params):
-    try:
-        resp = requests.get(
-            "http://www.omdbapi.com/",
-            params=params,
-            timeout=10,
-        )
-        if not resp.ok:
-            return None, f"OMDB error {resp.status_code}"
-        return resp.json(), None
-    except requests.exceptions.RequestException:
-        return None, "OMDB request failed"
+def omdb_get(params):
+    params["apikey"] = OMDB_API_KEY
+    r = requests.get("http://www.omdbapi.com/", params=params, timeout=10)
+    r.raise_for_status()
+    return r.json()
+
+
+def parse_detail(d, original_title=None):
+    rating = None
+    raw = d.get("imdbRating", "N/A")
+    if raw and raw != "N/A":
+        try:
+            rating = float(raw)
+        except ValueError:
+            pass
+
+    runtime = d.get("Runtime", "N/A")
+    runtime = None if runtime == "N/A" else runtime
+
+    genres = [g.strip() for g in d.get("Genre", "").split(",") if g.strip()][:2]
+
+    omdb_type = d.get("Type", "")
+    total_seasons = d.get("totalSeasons")
+    if omdb_type == "movie":
+        media_type = "Movie"
+    elif omdb_type in ("series", "episode"):
+        media_type = "Series"
+        if total_seasons and total_seasons != "N/A":
+            try:
+                n = int(total_seasons)
+                runtime = f"{n} season{'s' if n != 1 else ''}"
+            except ValueError:
+                pass
+    else:
+        media_type = "Series"
+
+    if "Animation" in genres and omdb_type == "series":
+        media_type = "Anime"
+    if "Documentary" in genres:
+        media_type = "Documentary"
+
+    plot = d.get("Plot", "")
+    if plot == "N/A":
+        plot = ""
+
+    poster = d.get("Poster", "")
+    if poster == "N/A":
+        poster = ""
+
+    return {
+        "title": d.get("Title", original_title or ""),
+        "found": True,
+        "rating": rating,
+        "genres": genres,
+        "runtime": runtime,
+        "type": media_type,
+        "year": d.get("Year", ""),
+        "poster": poster,
+        "plot": plot,
+    }
+
 
 @app.route("/")
 def index():
@@ -32,101 +81,53 @@ def fetch_info():
     if not OMDB_API_KEY:
         return jsonify({"error": "OMDB_API_KEY not set"}), 500
 
-    data = request.get_json() or {}
+    data = request.get_json()
     title = data.get("title", "").strip()
-
     if not title:
         return jsonify({"error": "No title provided"}), 400
 
-    # Primary lookup
-    d, err = safe_request({"t": title, "apikey": OMDB_API_KEY})
-    if err:
-        return jsonify({"error": err}), 502
+    d = omdb_get({"t": title, "plot": "short"})
 
-    # Fallback search
     if d.get("Response") == "False":
-        search_data, err = safe_request({"s": title, "apikey": OMDB_API_KEY})
-        if err:
-            return jsonify({"error": err}), 502
-
-        if search_data.get("Response") == "True" and search_data.get("Search"):
-            imdb_id = search_data["Search"][0].get("imdbID")
-
-            if imdb_id:
-                d, err = safe_request({"i": imdb_id, "apikey": OMDB_API_KEY})
-                if err:
-                    return jsonify({"error": err}), 502
-            else:
-                return jsonify({"title": title, "found": False})
+        sd = omdb_get({"s": title})
+        if sd.get("Response") == "True" and sd.get("Search"):
+            imdb_id = sd["Search"][0]["imdbID"]
+            d = omdb_get({"i": imdb_id, "plot": "short"})
         else:
             return jsonify({"title": title, "found": False})
 
-    # Rating
-    rating = None
-    raw_rating = d.get("imdbRating")
-    if raw_rating and raw_rating != "N/A":
-        try:
-            rating = float(raw_rating)
-        except (ValueError, TypeError):
-            rating = None
-
-    # Runtime
-    runtime = d.get("Runtime")
-    if not runtime or runtime == "N/A":
-        runtime = None
-
-    # Genres
-    genre_str = d.get("Genre", "")
-    all_genres = [g.strip() for g in genre_str.split(",") if g.strip()]
-    genres = all_genres[:2]
-    lower_genres = [g.lower() for g in all_genres]
-
-    # Type
-    omdb_type = d.get("Type", "")
-    total_seasons = d.get("totalSeasons")
-
-    if omdb_type == "movie":
-        media_type = "Movie"
-
-    elif omdb_type == "series":
-        media_type = "Series"
-
-        if total_seasons and total_seasons != "N/A":
-            try:
-                seasons = int(total_seasons)
-                runtime = f"{seasons} season{'s' if seasons != 1 else ''}"
-            except (ValueError, TypeError):
-                pass
-
-    elif omdb_type == "episode":
-        media_type = "Series"
-
-    else:
-        media_type = "Series"
-
-    # Overrides
-    if "animation" in lower_genres and omdb_type == "series":
-        media_type = "Anime"
-
-    if "documentary" in lower_genres:
-        media_type = "Documentary"
-
-    # Poster
-    poster = d.get("Poster")
-    if not poster or poster == "N/A":
-        poster = ""
-
-    return jsonify({
-        "title": d.get("Title", title),
-        "found": True,
-        "rating": rating,
-        "genres": genres,
-        "runtime": runtime,
-        "type": media_type,
-        "year": d.get("Year", ""),
-        "poster": poster,
-    })
+    return jsonify(parse_detail(d, title))
 
 
-# ❗ Do NOT run Flask server in production
-# Gunicorn will handle it
+@app.route("/api/search", methods=["POST"])
+def search():
+    if not OMDB_API_KEY:
+        return jsonify([]), 500
+
+    data = request.get_json()
+    query = data.get("query", "").strip()
+    if not query:
+        return jsonify([])
+
+    sd = omdb_get({"s": query})
+    if sd.get("Response") != "True":
+        return jsonify([])
+
+    results = []
+    for item in sd.get("Search", [])[:5]:
+        poster = item.get("Poster", "")
+        if poster == "N/A":
+            poster = ""
+        results.append({
+            "title": item.get("Title", ""),
+            "year": item.get("Year", ""),
+            "type": item.get("Type", "").capitalize(),
+            "poster": poster,
+            "imdbID": item.get("imdbID", ""),
+        })
+
+    return jsonify(results)
+
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
