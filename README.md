@@ -1,68 +1,90 @@
-# Watchlist App
+# My Watchlist
 
-A personal movie & TV tracker powered by Flask + Anthropic API.
+A personal movie & TV tracker using the free OMDB API for real IMDb data, hosted on Render.
 
-## Setup
-
-### 1. Install dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Set your Anthropic API key
-```bash
-# Mac/Linux
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# Windows
-set ANTHROPIC_API_KEY=sk-ant-...
-```
-
-Get your API key at: https://console.anthropic.com
-
-### 3. Run locally
-```bash
-python app.py
-```
-Open http://localhost:5000 in your browser.
+## Everything is free
+- **OMDB API** — 1,000 requests/day free. No credit card needed.
+- **GitHub** — free repo
+- **Render.com** — free web service tier
 
 ---
 
-## Deploying to a server (e.g. DigitalOcean, Render, Railway)
+## Step 1 — Get a free OMDB API key
 
-### Option A — Gunicorn (production WSGI server)
+1. Go to https://www.omdbapi.com/apikey.aspx
+2. Choose **FREE** (1,000 daily limit)
+3. Enter your email and submit
+4. Check your email and click the activation link
+5. Save your API key (looks like: `a1b2c3d4`)
+
+---
+
+## Step 2 — Push to GitHub
+
+1. Create a new repo on https://github.com/new
+   - Name it `watchlist` (or anything you like)
+   - Set it to **Public** or **Private** — both work with Render free tier
+   - Do NOT add a README (you already have files)
+
+2. In your terminal, inside this folder:
 ```bash
-pip install gunicorn
-gunicorn app:app --bind 0.0.0.0:5000
+git init
+git add .
+git commit -m "initial commit"
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+git push -u origin main
 ```
 
-### Option B — Render.com (free tier)
-1. Push this folder to a GitHub repo
-2. Create a new **Web Service** on Render
-3. Set **Build Command**: `pip install -r requirements.txt`
-4. Set **Start Command**: `gunicorn app:app`
-5. Add environment variable: `ANTHROPIC_API_KEY` = your key
-6. Deploy — Render gives you a public URL automatically
+---
 
-### Option C — Railway.app
-1. Push to GitHub, connect repo on Railway
-2. Add `ANTHROPIC_API_KEY` in Variables tab
-3. Railway auto-detects Python and deploys
+## Step 3 — Deploy on Render (free)
+
+1. Go to https://render.com and sign up (free)
+2. Click **New** → **Web Service**
+3. Connect your GitHub account and select your repo
+4. Fill in the settings:
+   - **Name**: watchlist (or anything)
+   - **Runtime**: Python 3
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `gunicorn app:app`
+   - **Instance Type**: Free
+5. Click **Advanced** → **Add Environment Variable**
+   - Key: `OMDB_API_KEY`
+   - Value: your key from Step 1
+6. Click **Create Web Service**
+
+Render will build and deploy. In ~2 minutes you'll get a live URL like:
+`https://watchlist-xxxx.onrender.com`
+
+---
+
+## Running locally (optional)
+
+```bash
+pip install -r requirements.txt
+export OMDB_API_KEY=your_key_here   # Mac/Linux
+# set OMDB_API_KEY=your_key_here    # Windows
+
+python app.py
+# open http://localhost:5000
+```
 
 ---
 
 ## File structure
+
 ```
 watchlist/
-├── app.py              # Flask backend (API proxy)
-├── requirements.txt    # Python dependencies
+├── app.py              # Flask backend — proxies OMDB API calls
+├── requirements.txt    # Python dependencies (includes gunicorn)
 ├── README.md
 └── static/
-    └── index.html      # Full frontend
+    └── index.html      # Full frontend (HTML/CSS/JS)
 ```
 
-## How it works
-- The frontend (`index.html`) calls `/api/fetch-info` on your Flask server
-- Flask adds your API key and forwards the request to Anthropic
-- Info is cached in the browser's localStorage so it only fetches once
-- Watched/pending status is also saved in localStorage
+## Notes
+- Info and watched status are saved in your browser's localStorage
+- "Reload info" button re-fetches everything fresh from OMDB
+- OMDB free tier: 1,000 requests/day. With 80 titles that's fine for personal use.
+- Render free tier spins down after 15 min of inactivity — first load may take ~30 seconds to wake up

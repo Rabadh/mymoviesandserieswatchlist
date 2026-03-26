@@ -6,7 +6,7 @@ from flask_cors import CORS
 app = Flask(__name__, static_folder="static")
 CORS(app)
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+OMDB_API_KEY = os.environ.get("OMDB_API_KEY", "")
 
 @app.route("/")
 def index():
@@ -14,53 +14,93 @@ def index():
 
 @app.route("/api/fetch-info", methods=["POST"])
 def fetch_info():
-    if not ANTHROPIC_API_KEY:
-        return jsonify({"error": "ANTHROPIC_API_KEY not set"}), 500
+    if not OMDB_API_KEY:
+        return jsonify({"error": "OMDB_API_KEY not set"}), 500
 
     data = request.get_json()
-    titles = data.get("titles", [])
-    if not titles:
-        return jsonify({"error": "No titles provided"}), 400
+    title = data.get("title", "").strip()
+    if not title:
+        return jsonify({"error": "No title provided"}), 400
 
-    payload = {
-        "model": "claude-sonnet-4-20250514",
-        "max_tokens": 2000,
-        "system": (
-            "You are a film and TV database. The user will send a list of titles. "
-            "Return ONLY a raw JSON array — no markdown, no backticks, no commentary. "
-            'Each element: {"title":<exact title string>,"rating":<number|null>,'
-            '"genres":[<up to 2 strings>],"runtime":<string|null>,'
-            '"type":<"Movie"|"Series"|"Mini-Series"|"Anime"|"Documentary"|"Reality">} '
-            'runtime: "Xh Ym" for movies, "N seasons" for shows. '
-            "Use your knowledge; if rating unknown use null."
-        ),
-        "messages": [{"role": "user", "content": "\n".join(titles)}],
-    }
-
-    resp = requests.post(
-        "https://api.anthropic.com/v1/messages",
-        headers={
-            "Content-Type": "application/json",
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-        },
-        json=payload,
-        timeout=60,
+    # Search OMDB by title
+    resp = requests.get(
+        "http://www.omdbapi.com/",
+        params={"t": title, "apikey": OMDB_API_KEY},
+        timeout=10,
     )
 
     if not resp.ok:
-        return jsonify({"error": resp.text}), resp.status_code
+        return jsonify({"error": f"OMDB error {resp.status_code}"}), 502
 
-    result = resp.json()
-    raw = "".join(c.get("text", "") for c in result.get("content", []))
-    clean = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+    d = resp.json()
 
-    try:
-        import json
-        parsed = json.loads(clean)
-        return jsonify(parsed)
-    except Exception as e:
-        return jsonify({"error": f"JSON parse error: {e}", "raw": clean}), 500
+    if d.get("Response") == "False":
+        # Try a search fallback (first result)
+        search_resp = requests.get(
+            "http://www.omdbapi.com/",
+            params={"s": title, "apikey": OMDB_API_KEY},
+            timeout=10,
+        )
+        search_data = search_resp.json()
+        if search_data.get("Response") == "True" and search_data.get("Search"):
+            imdb_id = search_data["Search"][0]["imdbID"]
+            detail_resp = requests.get(
+                "http://www.omdbapi.com/",
+                params={"i": imdb_id, "apikey": OMDB_API_KEY},
+                timeout=10,
+            )
+            d = detail_resp.json()
+        else:
+            return jsonify({"title": title, "found": False})
+
+    # Parse rating
+    rating = None
+    raw_rating = d.get("imdbRating", "N/A")
+    if raw_rating and raw_rating != "N/A":
+        try:
+            rating = float(raw_rating)
+        except ValueError:
+            pass
+
+    # Parse runtime
+    runtime = d.get("Runtime", "N/A")
+    if runtime == "N/A":
+        runtime = None
+
+    # Parse genres
+    genre_str = d.get("Genre", "")
+    genres = [g.strip() for g in genre_str.split(",") if g.strip()][:2]
+
+    # Determine type
+    omdb_type = d.get("Type", "")
+    total_seasons = d.get("totalSeasons")
+    if omdb_type == "movie":
+        media_type = "Movie"
+    elif omdb_type == "series":
+        media_type = "Series"
+        if total_seasons and total_seasons != "N/A":
+            runtime = f"{total_seasons} season{'s' if int(total_seasons) != 1 else ''}"
+    elif omdb_type == "episode":
+        media_type = "Series"
+    else:
+        media_type = "Series"
+
+    # Anime / documentary override via genre
+    if "Animation" in genres and omdb_type == "series":
+        media_type = "Anime"
+    if "Documentary" in genres:
+        media_type = "Documentary"
+
+    return jsonify({
+        "title": title,
+        "found": True,
+        "rating": rating,
+        "genres": genres,
+        "runtime": runtime,
+        "type": media_type,
+        "year": d.get("Year", ""),
+        "poster": d.get("Poster", "") if d.get("Poster") != "N/A" else "",
+    })
 
 
 if __name__ == "__main__":
