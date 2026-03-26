@@ -246,30 +246,61 @@ function posterCell(info) {
 }
 
 function colHeaders() {
-  return `<div class="col-head"><div></div><div>Poster</div><div>Title</div><div>Type</div><div>Genres</div><div>Runtime</div><div>IMDb</div></div>`;
+  return '<div class="col-head">
+  <div></div>
+  <div>Poster</div>
+  <div style="width:200px;">Title</div>
+  <div>Description</div>
+  <div>Type</div>
+  <div>Genres</div>
+  <div>Runtime</div>
+  <div>IMDb</div>
+</div>';
 }
+
+ 
 
 function rowHTML(t) {
   const s = state[t];
   const info = s.info;
   const loading = loadingSet.has(t);
   const esc = encodeURIComponent(t);
-
+ 
+const descriptionCell = info?.plot ? `<div class="desc-cell">${info.plot}</div>` : '<div class="desc-cell dash">—</div>';
   const typeCell = loading ? `<span class="dot"></span><span class="dot"></span><span class="dot"></span>` : typeBadge(info?.type);
   const genreCell = info?.genres?.length ? `<span class="genres">${info.genres.slice(0,2).join(', ')}</span>` : `<span class="dash">—</span>`;
   const rtCell = info?.runtime ? `<span class="runtime">${info.runtime}</span>` : `<span class="dash">—</span>`;
   const ratingCell = info?.rating ? `<div class="rating-cell"><span class="imdb-badge">IMDb</span><span class="rating-n">${info.rating}</span></div>` : `<span class="dash">—</span>`;
   const titleYear = info?.year ? `<span class="title-year">${info.year}</span>` : '';
+ const editBtn = `<button onclick="editTitle('${encodeURIComponent(t)}')">✎</button>`;
 
   return `<div class="row ${s.watched?'watched':''}" id="r-${esc}">
     <button class="toggle ${s.watched?'on':''}" onclick="toggleW('${esc}')">${s.watched?'✓':''}</button>
     ${posterCell(info)}
-    <div class="title-cell"><span>${t}</span>${titleYear}</div>
+   <div class="title-cell"><span>${t}</span>${titleYear}</div>
+    ${descriptionCell}
     <div>${typeCell}</div>
     <div>${genreCell}</div>
     <div>${rtCell}</div>
     <div>${ratingCell}</div>
   </div>`;
+}
+
+ function editTitle(esc) {
+  const t = decodeURIComponent(esc);
+  const newName = prompt("Edit title:", t);
+  if (!newName) return;
+
+  const properName = toProperCase(newName);
+
+  // Update TITLES and state
+  const idx = TITLES.indexOf(t);
+  if (idx !== -1) TITLES[idx] = properName;
+  state[properName] = state[t];
+  delete state[t];
+
+  save();
+  render();
 }
 
 function render() {
@@ -369,6 +400,8 @@ render();
 
   if (!title) return;
 
+  
+
   if (TITLES.includes(title)) {
     toast("Already exists");
     return;
@@ -396,6 +429,53 @@ render();
   input.value = "";
   toast("Added: " + title);
 }
+
+ const suggestionBox = document.createElement('div');
+suggestionBox.style.position = 'absolute';
+suggestionBox.style.background = 'var(--surface)';
+suggestionBox.style.border = '1px solid var(--border)';
+suggestionBox.style.maxHeight = '200px';
+suggestionBox.style.overflowY = 'auto';
+suggestionBox.style.zIndex = '100';
+suggestionBox.style.width = '200px';
+suggestionBox.style.display = 'none';
+document.body.appendChild(suggestionBox);
+
+const newTitleInput = document.getElementById('newTitle');
+newTitleInput.addEventListener('input', async () => {
+  const query = newTitleInput.value.trim();
+  if (!query) { suggestionBox.style.display = 'none'; return; }
+
+  try {
+    const res = await fetch('/api/fetch-info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: query })
+    });
+    const data = await res.json();
+    if (!data.found) { suggestionBox.style.display = 'none'; return; }
+
+    suggestionBox.innerHTML = `<div style="padding:5px;cursor:pointer;">${data.title}</div>`;
+    suggestionBox.style.display = 'block';
+    const rect = newTitleInput.getBoundingClientRect();
+    suggestionBox.style.top = rect.bottom + window.scrollY + 'px';
+    suggestionBox.style.left = rect.left + window.scrollX + 'px';
+
+    // Click to select
+    suggestionBox.querySelector('div').onclick = () => {
+      newTitleInput.value = data.title;
+      suggestionBox.style.display = 'none';
+    };
+  } catch(e) {
+    suggestionBox.style.display = 'none';
+  }
+});
+
+document.addEventListener('click', e => {
+  if (e.target !== newTitleInput) suggestionBox.style.display = 'none';
+});
+
+ 
 </script>
 </body>
 </html>
