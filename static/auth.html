@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Watchlist — Sign In</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  :root{--bg:#0d0d14;--surface:#111118;--border:#1e1e2a;--text:#e0ddd6;--muted:#666;--gold:#f5c518;--red:#e53935;--green:#4caf50;}
+  body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;}
+  .logo{font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:4px;color:var(--gold);margin-bottom:8px;text-align:center;}
+  .logo span{color:var(--text);}
+  .sub{font-size:13px;color:var(--muted);margin-bottom:32px;text-align:center;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:32px;width:100%;max-width:360px;}
+  .tabs{display:flex;gap:0;margin-bottom:28px;border-bottom:1px solid var(--border);}
+  .tab{flex:1;text-align:center;padding:10px;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.15s;}
+  .tab.on{color:var(--gold);border-bottom-color:var(--gold);font-weight:500;}
+  label{font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);display:block;margin-bottom:5px;margin-top:16px;}
+  label:first-of-type{margin-top:0;}
+  input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;transition:border-color 0.2s;}
+  input:focus{border-color:var(--gold);}
+  .btn{display:block;width:100%;margin-top:24px;padding:11px;background:var(--gold);color:#0d0d14;border:none;border-radius:3px;font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1px;cursor:pointer;transition:opacity 0.2s;}
+  .btn:hover{opacity:0.9;}
+  .btn:disabled{opacity:0.5;cursor:not-allowed;}
+  .err{margin-top:14px;padding:10px 14px;background:#2a0f0f;border:1px solid var(--red);border-radius:3px;color:#ff6b6b;font-size:13px;display:none;}
+  .ok{margin-top:14px;padding:10px 14px;background:#0f2a14;border:1px solid var(--green);border-radius:3px;color:#6bff8e;font-size:13px;display:none;}
+</style>
+</head>
+<body>
+<div class="logo">My <span>Watchlist</span></div>
+<p class="sub">Track what you've watched. Share profiles with family.</p>
+<div class="card">
+  <div class="tabs">
+    <div class="tab on" onclick="showTab('login')">Sign In</div>
+    <div class="tab" onclick="showTab('register')">Register</div>
+  </div>
+
+  <div id="login-form">
+    <label>Username</label>
+    <input type="text" id="l-user" placeholder="your username" autocomplete="username">
+    <label>Password</label>
+    <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="btn" id="l-btn" onclick="doLogin()">Sign In</button>
+    <div class="err" id="l-err"></div>
+  </div>
+
+  <div id="register-form" style="display:none;">
+    <label>Username</label>
+    <input type="text" id="r-user" placeholder="choose a username" autocomplete="username">
+    <label>Password</label>
+    <input type="password" id="r-pass" placeholder="••••••••" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()">
+    <button class="btn" id="r-btn" onclick="doRegister()">Create Account</button>
+    <div class="err" id="r-err"></div>
+    <div class="ok" id="r-ok"></div>
+  </div>
+</div>
+
+<script>
+function showTab(t){
+  document.getElementById('login-form').style.display=t==='login'?'block':'none';
+  document.getElementById('register-form').style.display=t==='register'?'block':'none';
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('on',(t==='login'&&i===0)||(t==='register'&&i===1)));
+}
+
+async function doLogin(){
+  const btn=document.getElementById('l-btn');
+  const err=document.getElementById('l-err');
+  const user=document.getElementById('l-user').value.trim();
+  const pass=document.getElementById('l-pass').value;
+  err.style.display='none';
+  if(!user||!pass){err.textContent='Please fill in all fields.';err.style.display='block';return;}
+  btn.disabled=true; btn.textContent='Signing in…';
+  try{
+    const res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({username:user,password:pass})});
+    const data=await res.json();
+    if(!res.ok){err.textContent=data.error||'Login failed.';err.style.display='block';}
+    else{ window.location.href='/app'; }
+  }catch(e){err.textContent='Network error. Try again.';err.style.display='block';}
+  btn.disabled=false; btn.textContent='Sign In';
+}
+
+async function doRegister(){
+  const btn=document.getElementById('r-btn');
+  const err=document.getElementById('r-err');
+  const ok=document.getElementById('r-ok');
+  const user=document.getElementById('r-user').value.trim();
+  const pass=document.getElementById('r-pass').value;
+  err.style.display='none'; ok.style.display='none';
+  if(!user||!pass){err.textContent='Please fill in all fields.';err.style.display='block';return;}
+  btn.disabled=true; btn.textContent='Creating…';
+  try{
+    const res=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({username:user,password:pass})});
+    const data=await res.json();
+    if(!res.ok){err.textContent=data.error||'Registration failed.';err.style.display='block';}
+    else{ window.location.href='/app'; }
+  }catch(e){err.textContent='Network error. Try again.';err.style.display='block';}
+  btn.disabled=false; btn.textContent='Create Account';
+}
+
+// Auto-redirect if already logged in
+fetch('/api/me',{credentials:'include'}).then(r=>r.json()).then(d=>{ if(d.authenticated) window.location.href='/app'; });
+</script>
+</body>
+</html>
