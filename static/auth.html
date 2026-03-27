@@ -13,7 +13,7 @@
   .logo span{color:var(--text);}
   .sub{font-size:13px;color:var(--muted);margin-bottom:32px;text-align:center;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:32px;width:100%;max-width:360px;}
-  .tabs{display:flex;gap:0;margin-bottom:28px;border-bottom:1px solid var(--border);}
+  .tabs{display:flex;margin-bottom:28px;border-bottom:1px solid var(--border);}
   .tab{flex:1;text-align:center;padding:10px;font-size:13px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.15s;}
   .tab.on{color:var(--gold);border-bottom-color:var(--gold);font-weight:500;}
   label{font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);display:block;margin-bottom:5px;margin-top:16px;}
@@ -23,83 +23,131 @@
   .btn{display:block;width:100%;margin-top:24px;padding:11px;background:var(--gold);color:#0d0d14;border:none;border-radius:3px;font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1px;cursor:pointer;transition:opacity 0.2s;}
   .btn:hover{opacity:0.9;}
   .btn:disabled{opacity:0.5;cursor:not-allowed;}
-  .err{margin-top:14px;padding:10px 14px;background:#2a0f0f;border:1px solid var(--red);border-radius:3px;color:#ff6b6b;font-size:13px;display:none;}
-  .ok{margin-top:14px;padding:10px 14px;background:#0f2a14;border:1px solid var(--green);border-radius:3px;color:#6bff8e;font-size:13px;display:none;}
+  .msg{margin-top:14px;padding:10px 14px;border-radius:3px;font-size:13px;display:none;word-break:break-word;}
+  .msg.err{background:#2a0f0f;border:1px solid var(--red);color:#ff6b6b;}
+  .msg.ok{background:#0f2a14;border:1px solid var(--green);color:#6bff8e;}
+  .debug{margin-top:20px;font-size:11px;color:var(--muted);text-align:center;}
+  .debug a{color:var(--muted);text-decoration:underline;cursor:pointer;}
 </style>
 </head>
 <body>
 <div class="logo">My <span>Watchlist</span></div>
 <p class="sub">Track what you've watched. Share profiles with family.</p>
+
 <div class="card">
   <div class="tabs">
     <div class="tab on" onclick="showTab('login')">Sign In</div>
     <div class="tab" onclick="showTab('register')">Register</div>
   </div>
 
+  <!-- Login -->
   <div id="login-form">
     <label>Username</label>
-    <input type="text" id="l-user" placeholder="your username" autocomplete="username">
+    <input type="text" id="l-user" placeholder="your username" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
     <label>Password</label>
     <input type="password" id="l-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="btn" id="l-btn" onclick="doLogin()">Sign In</button>
-    <div class="err" id="l-err"></div>
+    <div class="msg err" id="l-err"></div>
   </div>
 
+  <!-- Register -->
   <div id="register-form" style="display:none;">
     <label>Username</label>
-    <input type="text" id="r-user" placeholder="choose a username" autocomplete="username">
+    <input type="text" id="r-user" placeholder="choose a username" autocomplete="username" onkeydown="if(event.key==='Enter')doRegister()">
     <label>Password</label>
-    <input type="password" id="r-pass" placeholder="••••••••" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()">
+    <input type="password" id="r-pass" placeholder="at least 4 characters" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()">
     <button class="btn" id="r-btn" onclick="doRegister()">Create Account</button>
-    <div class="err" id="r-err"></div>
-    <div class="ok" id="r-ok"></div>
+    <div class="msg err" id="r-err"></div>
+    <div class="msg ok" id="r-ok"></div>
   </div>
+</div>
+
+<div class="debug">
+  Server check: <a onclick="pingServer()">ping /api/ping</a>
+  <div id="ping-result" style="margin-top:4px;"></div>
 </div>
 
 <script>
 function showTab(t){
-  document.getElementById('login-form').style.display=t==='login'?'block':'none';
-  document.getElementById('register-form').style.display=t==='register'?'block':'none';
-  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('on',(t==='login'&&i===0)||(t==='register'&&i===1)));
+  document.getElementById('login-form').style.display    = t==='login'    ? 'block' : 'none';
+  document.getElementById('register-form').style.display = t==='register' ? 'block' : 'none';
+  document.querySelectorAll('.tab').forEach((el,i) =>
+    el.classList.toggle('on', (t==='login'&&i===0)||(t==='register'&&i===1))
+  );
+}
+
+async function apiFetch(url, body){
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body)
+  });
+  let data;
+  try { data = await res.json(); } catch(e) { data = { error: `Server returned non-JSON (status ${res.status})` }; }
+  return { ok: res.ok, status: res.status, data };
 }
 
 async function doLogin(){
-  const btn=document.getElementById('l-btn');
-  const err=document.getElementById('l-err');
-  const user=document.getElementById('l-user').value.trim();
-  const pass=document.getElementById('l-pass').value;
-  err.style.display='none';
-  if(!user||!pass){err.textContent='Please fill in all fields.';err.style.display='block';return;}
-  btn.disabled=true; btn.textContent='Signing in…';
-  try{
-    const res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({username:user,password:pass})});
-    const data=await res.json();
-    if(!res.ok){err.textContent=data.error||'Login failed.';err.style.display='block';}
-    else{ window.location.href='/app'; }
-  }catch(e){err.textContent='Network error. Try again.';err.style.display='block';}
-  btn.disabled=false; btn.textContent='Sign In';
+  const btn = document.getElementById('l-btn');
+  const err = document.getElementById('l-err');
+  const user = document.getElementById('l-user').value.trim();
+  const pass = document.getElementById('l-pass').value;
+  err.style.display = 'none';
+  if(!user || !pass){ showMsg('l-err', 'Please fill in both fields.'); return; }
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try {
+    const { ok, data } = await apiFetch('/api/login', { username: user, password: pass });
+    if(ok){ window.location.href = '/app'; }
+    else  { showMsg('l-err', data.error || 'Login failed.'); }
+  } catch(e) {
+    showMsg('l-err', 'Could not reach server. Is it running? (' + e.message + ')');
+  }
+  btn.disabled = false; btn.textContent = 'Sign In';
 }
 
 async function doRegister(){
-  const btn=document.getElementById('r-btn');
-  const err=document.getElementById('r-err');
-  const ok=document.getElementById('r-ok');
-  const user=document.getElementById('r-user').value.trim();
-  const pass=document.getElementById('r-pass').value;
-  err.style.display='none'; ok.style.display='none';
-  if(!user||!pass){err.textContent='Please fill in all fields.';err.style.display='block';return;}
-  btn.disabled=true; btn.textContent='Creating…';
-  try{
-    const res=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({username:user,password:pass})});
-    const data=await res.json();
-    if(!res.ok){err.textContent=data.error||'Registration failed.';err.style.display='block';}
-    else{ window.location.href='/app'; }
-  }catch(e){err.textContent='Network error. Try again.';err.style.display='block';}
-  btn.disabled=false; btn.textContent='Create Account';
+  const btn = document.getElementById('r-btn');
+  const user = document.getElementById('r-user').value.trim();
+  const pass = document.getElementById('r-pass').value;
+  document.getElementById('r-err').style.display = 'none';
+  document.getElementById('r-ok').style.display  = 'none';
+  if(!user || !pass){ showMsg('r-err', 'Please fill in both fields.'); return; }
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try {
+    const { ok, data } = await apiFetch('/api/register', { username: user, password: pass });
+    if(ok){ window.location.href = '/app'; }
+    else  { showMsg('r-err', data.error || 'Registration failed.'); }
+  } catch(e) {
+    showMsg('r-err', 'Could not reach server. Is it running? (' + e.message + ')');
+  }
+  btn.disabled = false; btn.textContent = 'Create Account';
+}
+
+function showMsg(id, msg){
+  const el = document.getElementById(id);
+  el.textContent = msg; el.style.display = 'block';
+}
+
+async function pingServer(){
+  const el = document.getElementById('ping-result');
+  el.textContent = 'pinging…';
+  try {
+    const res = await fetch('/api/ping', { credentials: 'include' });
+    const data = await res.json();
+    el.textContent = '✓ ' + JSON.stringify(data);
+    el.style.color = '#6bff8e';
+  } catch(e) {
+    el.textContent = '✗ ' + e.message;
+    el.style.color = '#ff6b6b';
+  }
 }
 
 // Auto-redirect if already logged in
-fetch('/api/me',{credentials:'include'}).then(r=>r.json()).then(d=>{ if(d.authenticated) window.location.href='/app'; });
+fetch('/api/me', { credentials: 'include' })
+  .then(r => r.json())
+  .then(d => { if(d.authenticated) window.location.href = '/app'; })
+  .catch(() => {});
 </script>
 </body>
 </html>
