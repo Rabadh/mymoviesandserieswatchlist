@@ -398,3 +398,68 @@ with app.app_context():
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
+
+# ── Seed endpoint ─────────────────────────────────────────────────────────────
+
+SEED_TITLES = [
+    "100 Years of Solitude", "A House of Dynamite", "Amazon Jail",
+    "Ascendence of a Bookworm", "Atlanta", "Band of Brothers",
+    "Better Call Saul", "Black Mirror", "Caligula", "Castlevania",
+    "Centerfold Girls", "Civil War", "Clarkson's Farm", "Dark Matter",
+    "Deep Cover", "Demon Slayer", "Detectorists", "Devil May Cry", "Devs",
+    "Dragon Keeper", "Extrapolations", "For All Mankind", "Frieren",
+    "Full Metal Alchemist", "Gangubhai Kathiawadi", "Green Eggs and Ham",
+    "Heeramandi", "He-Man", "Inu Yasha",
+    "It's Always Sunny in Philadelphia", "Jujutsu Kaisen", "Justified",
+    "Knight of the Seven Kingdoms", "Landman", "Lifeforce", "Mad Men",
+    "Maid", "Masters of the Air", "Mindhunter", "MobLand", "Murderbot",
+    "My Hero Academia", "Nobody Wants This", "Ozark",
+    "Pride and Prejudice (1995 BBC)", "Re:Zero", "Rutherford Falls",
+    "SAO (Sword Art Online)", "Shameless", "Shogun", "Slam Dunk",
+    "Slow Horses", "Sons of Anarchy", "Spy x Family", "Squid Game",
+    "Star Trek: The Next Generation", "Succession", "Supernatural",
+    "The Bear", "The Day of the Jackal", "The Diplomat", "The Gentleman",
+    "The Good Place", "The Night Off", "The Penguin", "The Sopranos",
+    "The Traitors", "The Unbreakable Boy", "The West Wing",
+    "The White Lotus", "The Wire", "Time Bandits",
+    "True Detective (Season 1)", "Tulsa King", "Turn: Washington's Spies",
+    "U Forgotten", "Under the Skin", "Until I Kill You", "Veep",
+    "War on Rohirrim",
+]
+
+@app.route("/api/seed-my-list", methods=["GET", "POST"])
+@login_required
+def seed_my_list():
+    profile = current_user.profiles[0] if current_user.profiles else None
+    if not profile:
+        profile = Profile(user_id=current_user.id, name=current_user.username.capitalize() + "'s List")
+        db.session.add(profile)
+        db.session.flush()
+
+    added, skipped = [], []
+    for title in SEED_TITLES:
+        exists = Entry.query.filter_by(profile_id=profile.id, title=title).first()
+        if exists:
+            skipped.append(title)
+        else:
+            entry = Entry(profile_id=profile.id, title=title)
+            db.session.add(entry)
+            added.append(title)
+
+    db.session.commit()
+
+    rows = "".join(f"<li>{t}</li>" for t in added)
+    return f"""<!DOCTYPE html>
+<html><head><style>
+  body{{font-family:sans-serif;background:#0d0d14;color:#e0ddd6;padding:40px;max-width:600px;}}
+  h2{{color:#f5c518;margin-bottom:16px;}} .ok{{color:#4caf50;}} .sk{{color:#666;}}
+  a{{color:#f5c518;font-weight:500;}} ul{{margin:10px 0 0;padding-left:20px;line-height:1.9;}}
+  details{{margin-top:20px;}} summary{{cursor:pointer;color:#666;}}
+</style></head>
+<body>
+  <h2>Import complete!</h2>
+  <p class="ok">&#10003; {len(added)} titles added to <strong>{profile.name}</strong></p>
+  <p class="sk">&#8212; {len(skipped)} already existed, skipped</p>
+  <br><a href="/app">Go to my watchlist &rarr;</a>
+  <details><summary>Show added titles ({len(added)})</summary><ul>{rows}</ul></details>
+</body></html>""", 200
