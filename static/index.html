@@ -197,6 +197,7 @@ select{background:var(--surface);border:1px solid var(--border);border-radius:3p
   <button class="vbtn on" id="vl" onclick="setView('list')" title="List view">☰</button>
   <button class="vbtn"    id="vc" onclick="setView('card')" title="Card view">⊞</button>
   <button class="rbtn" id="bdb" onclick="bulkDelete()">Delete selected</button>
+  <button class="fbtn" onclick="openBulkAdd()" title="Add multiple titles at once">Bulk Add</button>
   <button class="gbtn" id="fab" onclick="refetchAll()">Reload info</button>
 </div>
 
@@ -231,6 +232,20 @@ select{background:var(--surface);border:1px solid var(--border);border-radius:3p
     <div class="mbtns">
       <button onclick="closeModal('npmod')">Cancel</button>
       <button class="sv" onclick="saveProfile()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk add modal -->
+<div class="mo" id="bamod">
+  <div class="md" style="width:500px;">
+    <h3>Bulk Add Titles</h3>
+    <label>Paste titles — one per line</label>
+    <textarea id="ba-text" placeholder="Breaking Bad&#10;The Sopranos&#10;Inception&#10;…" style="min-height:220px;margin-top:4px;font-size:13px;line-height:1.7;"></textarea>
+    <div id="ba-status" style="font-size:12px;color:var(--muted);margin-top:10px;min-height:18px;"></div>
+    <div class="mbtns">
+      <button onclick="closeModal('bamod')">Cancel</button>
+      <button class="sv" id="ba-btn" onclick="runBulkAdd()">Import</button>
     </div>
   </div>
 </div>
@@ -492,6 +507,72 @@ async function bulkDelete(){
   await fetch('/api/entries/bulk-delete',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});
   entries=entries.filter(e=>!selIds.has(e.id)); selIds.clear(); render();
   toast(`Deleted ${ids.length} title${ids.length>1?'s':''}`);
+}
+
+// ── Bulk Add ─────────────────────────────────────────────────
+function openBulkAdd(){
+  document.getElementById('ba-text').value='';
+  document.getElementById('ba-status').textContent='';
+  document.getElementById('ba-btn').disabled=false;
+  document.getElementById('ba-btn').textContent='Import';
+  document.getElementById('bamod').classList.add('open');
+  setTimeout(()=>document.getElementById('ba-text').focus(),80);
+}
+
+async function runBulkAdd(){
+  if(!curPid) return;
+  const raw=document.getElementById('ba-text').value;
+  const titles=[...new Set(
+    raw.split('
+')
+      .map(l=>l.trim())
+      .filter(l=>l.length>0)
+      .map(l=>toPC(l))
+  )];
+  if(!titles.length){ document.getElementById('ba-status').textContent='No titles found.'; return; }
+
+  const btn=document.getElementById('ba-btn');
+  btn.disabled=true;
+  const status=document.getElementById('ba-status');
+
+  let added=[], skipped=[], failed=[];
+
+  for(let i=0;i<titles.length;i++){
+    const title=titles[i];
+    status.textContent=`Adding ${i+1} of ${titles.length}: ${title}…`;
+
+    // Skip if already in local list
+    if(entries.find(e=>e.title.toLowerCase()===title.toLowerCase())){
+      skipped.push(title); continue;
+    }
+    try{
+      const r=await fetch(`/api/profiles/${curPid}/entries`,{
+        method:'POST',credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({title})
+      });
+      if(r.status===409){ skipped.push(title); continue; }
+      if(!r.ok){ failed.push(title); continue; }
+      const ne=await r.json();
+      entries.push(ne);
+      added.push(ne);
+    }catch(e){ failed.push(title); }
+  }
+
+  // Kick off OMDB fetches in background (non-blocking)
+  added.forEach(e=>fetchAndSave(e));
+  render();
+
+  // Show summary
+  let summary=[];
+  if(added.length)   summary.push(`<span style="color:var(--green)">✓ ${added.length} added</span>`);
+  if(skipped.length) summary.push(`<span style="color:var(--muted)">— ${skipped.length} already existed</span>`);
+  if(failed.length)  summary.push(`<span style="color:var(--red)">✗ ${failed.length} failed</span>`);
+  status.innerHTML=summary.join(' &nbsp;·&nbsp; ');
+
+  btn.textContent='Done';
+  // Auto-close after 2s if all went well
+  if(!failed.length) setTimeout(()=>closeModal('bamod'),2000);
 }
 
 // ── Edit ──────────────────────────────────────────────────────
