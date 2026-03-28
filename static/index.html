@@ -312,10 +312,12 @@ function setView(v){
 }
 
 function getFiltered(){
-  const q=document.getElementById('search').value.toLowerCase();
+  const raw=document.getElementById('search').value.toLowerCase().trim();
   const sort=document.getElementById('sort').value;
+  // Split into words so "secret life" matches "The Secret Life of…"
+  const words=raw.split(/\s+/).filter(Boolean);
   let list=[...entries].filter(e=>{
-    if(q&&!e.title.toLowerCase().includes(q)) return false;
+    if(words.length&&!words.every(w=>e.title.toLowerCase().includes(w))) return false;
     if(filter==='watched'&&!e.watched) return false;
     if(filter==='pending'&&e.watched) return false;
     return true;
@@ -539,8 +541,7 @@ function hideSug(){document.getElementById('sug').style.display='none';sugItems=
 
 async function onAddInput(){
   const inp=document.getElementById('newTitle');
-  let q=inp.value;
-  if(q){const pc=toPC(q);if(pc!==q){const p=inp.selectionStart;inp.value=pc;try{inp.setSelectionRange(p,p);}catch(e){}}}
+  const q=inp.value;  // no toPC here — applied only on Add/submit so typing spaces works freely
   clearTimeout(sugT);
   if(q.trim().length<2){hideSug();return;}
   sugT=setTimeout(async()=>{
@@ -562,7 +563,9 @@ function renderSug(items,inp){
       <div><div>${item.title}</div><div class="si-meta">${[item.year,item.type].filter(Boolean).join(' · ')}</div></div>
     </div>`).join('');
   const rect=inp.getBoundingClientRect();
-  el.style.top=(rect.bottom+window.scrollY+4)+'px';
+  // Use fixed positioning so dropdown is always visible without scrolling
+  el.style.position='fixed';
+  el.style.top=(rect.bottom+4)+'px';
   el.style.left=rect.left+'px';
   el.style.width=Math.max(inp.offsetWidth,260)+'px';
   el.style.display='block';
