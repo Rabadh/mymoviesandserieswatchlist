@@ -523,8 +523,7 @@ async function runBulkAdd(){
   if(!curPid) return;
   const raw=document.getElementById('ba-text').value;
   const titles=[...new Set(
-    raw.split('
-')
+    raw.split('\n')
       .map(l=>l.trim())
       .filter(l=>l.length>0)
       .map(l=>toPC(l))
