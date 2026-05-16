@@ -16,11 +16,20 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-producti
 db_url = os.environ.get("DATABASE_URL", "sqlite:///watchlist.db")
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
-# Add SSL required for Render PostgreSQL
-if "postgresql" in db_url and "sslmode" not in db_url:
-    db_url += "?sslmode=require"
+# Remove sslmode from URL if present — we set it via connect_args instead
+if "?sslmode=" in db_url:
+    db_url = db_url.split("?sslmode=")[0]
+
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
+
+if "postgresql" in db_url:
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "connect_args": {"sslmode": "require"}
+    }
+else:
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 
 # Detect production (Render sets the RENDER env var automatically)
 IS_PROD = bool(os.environ.get("RENDER"))
