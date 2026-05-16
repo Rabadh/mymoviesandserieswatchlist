@@ -395,11 +395,11 @@ def main_app():
     return send_from_directory(app.static_folder, "index.html")
 
 # ── Bootstrap DB & run ────────────────────────────────────────────────────────
-try:
-    with app.app_context():
+with app.app_context():
+    try:
         db.create_all()
-except Exception as e:
-    print(f"Warning: Could not create tables: {e}")
+    except Exception as e:
+        print("DB init warning:", e)
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
