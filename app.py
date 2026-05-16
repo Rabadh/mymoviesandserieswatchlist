@@ -16,8 +16,11 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-producti
 db_url = os.environ.get("DATABASE_URL", "sqlite:///watchlist.db")
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
+# Add SSL required for Render PostgreSQL
+if "postgresql" in db_url and "sslmode" not in db_url:
+    db_url += "?sslmode=require"
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 
 # Detect production (Render sets the RENDER env var automatically)
 IS_PROD = bool(os.environ.get("RENDER"))
@@ -392,13 +395,14 @@ def main_app():
     return send_from_directory(app.static_folder, "index.html")
 
 # ── Bootstrap DB & run ────────────────────────────────────────────────────────
-
-with app.app_context():
-    db.create_all()
+try:
+    with app.app_context():
+        db.create_all()
+except Exception as e:
+    print(f"Warning: Could not create tables: {e}")
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
-
 # ── Seed endpoint ─────────────────────────────────────────────────────────────
 
 SEED_TITLES = [
