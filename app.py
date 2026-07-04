@@ -1,5 +1,4 @@
 import os
-import re
 import time
 import random
 import difflib
@@ -122,7 +121,7 @@ class TitleCache(db.Model):
     runtime    = db.Column(db.String(50))
     poster     = db.Column(db.String(500))
     plot       = db.Column(db.Text)
-    source     = db.Column(db.String(20), default="omdb")   # omdb | seed | reddit
+    source     = db.Column(db.String(20), default="omdb")   # omdb | seed
     updated    = db.Column(db.DateTime, default=datetime.utcnow)
 
 def cache_title(parsed, imdb_id=None, source="omdb"):
@@ -690,104 +689,6 @@ def get_recommendations(pid):
         "genres": c["genres"], "rating": c["rating"], "poster": c["poster"],
         "plot":   brief(c["plot"]), "tmdb_id": c["tmdb_id"],
     } for c in top])
-
-
-# ── Reddit picks ──────────────────────────────────────────────────────────────
-
-DEFAULT_SUBREDDITS = ["MovieSuggestions", "televisionsuggestions"]
-_reddit_cache = {}  # subreddit key -> (timestamp, data)
-REDDIT_CACHE_TTL = 3600
-
-TITLE_PATTERNS = [
-    re.compile(r'\*\*([A-Z][A-Za-z0-9:,\'\.\-\s]{2,60}?)\*\*'),       # **Bold Title**
-    re.compile(r'"([A-Z][A-Za-z0-9:,\'\.\-\s]{2,60}?)"'),              # "Quoted Title"
-    re.compile(r'\b([A-Z][A-Za-z0-9:,\'\.\-\s]{2,50}?)\s*\((19|20)\d{2}\)'),  # Title (Year)
-]
-
-def _extract_candidate_titles(text):
-    found = set()
-    for pat in TITLE_PATTERNS:
-        for m in pat.finditer(text or ""):
-            candidate = m.group(1).strip(" -:,'\".")
-            if 2 <= len(candidate) <= 60:
-                found.add(candidate)
-    return found
-
-def _fetch_reddit_json(url):
-    headers = {"User-Agent": "watchlist-app/1.0 (recommendation feature)"}
-    r = requests.get(url, headers=headers, timeout=8)
-    r.raise_for_status()
-    return r.json()
-
-@app.route("/api/reddit-picks", methods=["GET"])
-@login_required
-def reddit_picks():
-    subs = request.args.get("subreddits", "")
-    subreddit_list = [s.strip() for s in subs.split(",") if s.strip()] or DEFAULT_SUBREDDITS
-    cache_key = ",".join(sorted(subreddit_list)).lower()
-
-    cached = _reddit_cache.get(cache_key)
-    if cached and time.time() - cached[0] < REDDIT_CACHE_TTL:
-        return jsonify(cached[1])
-
-    candidates = {}  # title -> {source_sub, permalink}
-    try:
-        for sub in subreddit_list[:5]:
-            listing = _fetch_reddit_json(f"https://www.reddit.com/r/{sub}/hot.json?limit=8")
-            posts = listing.get("data", {}).get("children", [])
-            for post in posts[:6]:
-                pdata = post.get("data", {})
-                permalink = "https://www.reddit.com" + pdata.get("permalink", "")
-                # candidates from the post title itself
-                for t in _extract_candidate_titles(pdata.get("title", "")):
-                    candidates.setdefault(t, {"sub": sub, "permalink": permalink})
-                # candidates from top comments
-                try:
-                    thread = _fetch_reddit_json(f"https://www.reddit.com{pdata.get('permalink','')}.json?limit=15")
-                    comments = thread[1]["data"]["children"] if len(thread) > 1 else []
-                    for c in comments[:15]:
-                        body = c.get("data", {}).get("body", "")
-                        for t in _extract_candidate_titles(body):
-                            candidates.setdefault(t, {"sub": sub, "permalink": permalink})
-                except Exception:
-                    pass
-    except Exception:
-        pass
-
-    # Verify each candidate is a real title before showing it — prefer TMDb
-    # (better fuzzy match on the messy titles Reddit posts contain).
-    verified = []
-    for title, meta in list(candidates.items())[:20]:
-        try:
-            match = None
-            if TMDB_API_KEY:
-                hits = tmdb_search(title)
-                if hits:
-                    match = hits[0]
-            if not match and OMDB_API_KEY:
-                d = omdb_get({"t": title, "plot": "short"})
-                if d.get("Response") != "False":
-                    match = parse_omdb(d, title)
-                    cache_title(match, imdb_id=d.get("imdbID"), source="reddit")
-            if not match:
-                continue
-            if TMDB_API_KEY and match.get("tmdb_id"):
-                cache_title(match, source="reddit")
-            verified.append({
-                "title":     match["title"],
-                "year":      match["year"],
-                "type":      match["type"],
-                "poster":    match["poster"],
-                "plot":      (match.get("plot") or "")[:140],
-                "rating":    match.get("rating"),
-                "subreddit": meta["sub"],
-                "permalink": meta["permalink"],
-            })
-        except Exception:
-            continue
-
-    _reddit_cache[cache_key] = (time.time(), verified)
-    return jsonify(verified)
 
 # ── Static pages ──────────────────────────────────────────────────────────────
 
