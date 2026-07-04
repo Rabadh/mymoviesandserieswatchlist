@@ -521,7 +521,7 @@ function recCard(r,addFnName,i){
       <div class="cm">${meta}</div>
       <div class="cplot">${r.plot||''}</div>
       <div class="rec-actions">
-        <button class="rab ${inList?'added':''}" onclick="${addFnName}(${i},false)">${inList?'✓ In list':'+ Watchlist'}</button>
+        <button class="rab ${inList?'added':''}" onclick="${addFnName}(${i},false)">${inList?'✓ In list':'Watchlist'}</button>
         <button class="rab ${isWatched?'added':''}" onclick="${addFnName}(${i},true)">${isWatched?'✓ Watched':'Watched'}</button>
         <button class="rdis" title="Not interested — don't show this again" onclick="dismissRecommended(${i})">✕</button>
       </div>
