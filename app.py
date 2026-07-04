@@ -106,6 +106,16 @@ class Entry(db.Model):
             "custom_desc": self.custom_desc or "",
         }
 
+class DismissedTitle(db.Model):
+    """Titles a profile has said 'not interested' to — excluded from future
+    recommendations permanently (until un-dismissed)."""
+    __tablename__ = "dismissed_titles"
+    id         = db.Column(db.Integer, primary_key=True)
+    profile_id = db.Column(db.Integer, db.ForeignKey("profiles.id"), nullable=False)
+    title      = db.Column(db.String(200), nullable=False)
+    created    = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint("profile_id", "title", name="uq_dismiss_profile_title"),)
+
 class TitleCache(db.Model):
     """Every title OMDb has ever returned to this app, across all users.
     Grows organically with usage. Powers typo-correction and doubles as the
@@ -286,6 +296,33 @@ def delete_profile(pid):
     profile = Profile.query.filter_by(id=pid, user_id=current_user.id).first_or_404()
     db.session.delete(profile)
     db.session.commit()
+    return jsonify({"ok": True})
+
+# ── Dismissed ("not interested") titles ─────────────────────────────────────
+
+@app.route("/api/profiles/<int:pid>/dismiss", methods=["POST"])
+@login_required
+def dismiss_title(pid):
+    profile = Profile.query.filter_by(id=pid, user_id=current_user.id).first_or_404()
+    data = request.get_json(force=True, silent=True) or {}
+    title = (data.get("title") or "").strip()
+    if not title:
+        return jsonify({"error": "Title required"}), 400
+    if not DismissedTitle.query.filter_by(profile_id=pid, title=title).first():
+        db.session.add(DismissedTitle(profile_id=pid, title=title))
+        db.session.commit()
+    return jsonify({"ok": True, "title": title})
+
+@app.route("/api/profiles/<int:pid>/dismiss", methods=["DELETE"])
+@login_required
+def undismiss_title(pid):
+    profile = Profile.query.filter_by(id=pid, user_id=current_user.id).first_or_404()
+    data = request.get_json(force=True, silent=True) or {}
+    title = (data.get("title") or "").strip()
+    row = DismissedTitle.query.filter_by(profile_id=pid, title=title).first()
+    if row:
+        db.session.delete(row)
+        db.session.commit()
     return jsonify({"ok": True})
 
 # ── Entries ───────────────────────────────────────────────────────────────────
@@ -657,6 +694,8 @@ def _tmdb_candidates(genre_counts, type_counts):
 def get_recommendations(pid):
     profile = Profile.query.filter_by(id=pid, user_id=current_user.id).first_or_404()
     existing_titles = {e.title.strip().lower() for e in profile.entries}
+    dismissed_titles = {d.title.strip().lower() for d in DismissedTitle.query.filter_by(profile_id=pid).all()}
+    excluded_titles = existing_titles | dismissed_titles
 
     if not TMDB_API_KEY:
         return jsonify({"error": "TMDB_API_KEY not set"}), 500
@@ -669,7 +708,7 @@ def get_recommendations(pid):
 
     scored = []
     for c in candidates:
-        if c["title"].strip().lower() in existing_titles:
+        if c["title"].strip().lower() in excluded_titles:
             continue
         score = sum(genre_counts.get(g, 0) for g in c["genres"])
         if type_counts.get(c["type"]):
