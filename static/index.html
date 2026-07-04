@@ -160,7 +160,7 @@ select{background:var(--surface);border:1px solid var(--border);border-radius:3p
 .mbtns button{padding:7px 16px;border-radius:3px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;border:1px solid var(--border);background:var(--bg);color:var(--muted);}
 .mbtns .sv{background:var(--gold);color:#0d0d14;border-color:var(--gold);font-weight:500;}
 
-/* Recommendation / Reddit rows (horizontal scroll, reuses card look) */
+/* Recommendation rows (horizontal scroll, reuses card look) */
 .rec-row{display:flex;gap:12px;overflow-x:auto;padding:10px 24px 18px;scroll-snap-type:x proximity;}
 .rec-card{flex:0 0 152px;scroll-snap-align:start;background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden;display:flex;flex-direction:column;}
 .rec-card .cp{width:100%;aspect-ratio:2/3;object-fit:cover;display:block;background:var(--dim);}
@@ -172,8 +172,6 @@ select{background:var(--surface);border:1px solid var(--border);border-radius:3p
 .rec-card .rab{width:100%;margin-top:auto;padding:5px 0;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--gold);font-size:11px;font-weight:500;cursor:pointer;}
 .rec-card .rab:hover{border-color:var(--gold);}
 .rec-card .rab.added{color:var(--green);border-color:var(--green);opacity:.7;pointer-events:none;}
-.reddit-src{color:var(--gold);text-decoration:none;}
-.reddit-src:hover{text-decoration:underline;}
 </style>
 </head>
 <body>
@@ -218,13 +216,6 @@ select{background:var(--surface);border:1px solid var(--border);border-radius:3p
 
 <div class="sh">Recommended for you</div>
 <div class="rec-row" id="rec-row"><div class="empty" style="padding:16px 0">Loading recommendations…</div></div>
-
-<div class="sh">
-  From Reddit
-  <input type="text" id="reddit-subs" placeholder="Subreddits, comma-separated (default: MovieSuggestions, televisionsuggestions)" style="margin-left:10px;width:320px;">
-  <button class="fbtn" onclick="loadReddit(document.getElementById('reddit-subs').value.trim())">Go</button>
-</div>
-<div class="rec-row" id="reddit-row"><div class="empty" style="padding:16px 0">Loading Reddit picks…</div></div>
 
 <div id="sug"></div>
 <div id="body"></div>
@@ -286,7 +277,7 @@ function toPC(s){
 let profiles=[], curPid=null, entries=[], loadingIds=new Set();
 let filter='pending', view='list', editId=null, selIds=new Set();
 let sugT=null, sugItems=[], sugIdx=-1;
-let recs=[], redditPicks=[];
+let recs=[];
 
 // ── Boot ──────────────────────────────────────────────────────
 async function init(){
@@ -297,7 +288,6 @@ async function init(){
   profiles=me.profiles;
   if(profiles.length) await switchProfile(profiles[0].id);
   renderPbar();
-  loadReddit('');
 }
 
 // ── Profiles ──────────────────────────────────────────────────
@@ -319,7 +309,6 @@ async function switchProfile(id){
   const missing=entries.filter(e=>!e.type&&!loadingIds.has(e.id));
   missing.forEach(e=>fetchAndSave(e));
   loadRecs();
-  if(redditPicks.length) renderReddit(); // re-check "already added" state for new profile
 }
 
 async function saveProfile(){
@@ -515,11 +504,12 @@ async function loadRecs(){
 function renderRecs(){
   const el=document.getElementById('rec-row');
   if(!recs.length){el.innerHTML='<div class="empty" style="padding:16px 0">Nothing to recommend yet — add a few titles and mark some watched.</div>';return;}
-  el.innerHTML=recs.map((r,i)=>recCard(r,'addRecommended('+i+')')).join('');
+  el.innerHTML=recs.map((r,i)=>recCard(r,'addRecommended',i)).join('');
 }
 
-function recCard(r,onclickCall){
-  const already=entries.some(e=>e.title.toLowerCase()===r.title.toLowerCase());
+function recCard(r,addFnName,i){
+  const existing=entries.find(e=>e.title.toLowerCase()===r.title.toLowerCase());
+  const inList=!!existing, isWatched=!!(existing&&existing.watched);
   const meta=[r.year,r.type].filter(Boolean).join(' · ')+(r.rating?' · ★'+r.rating:'');
   return `<div class="rec-card">
     ${r.poster?`<img class="cp" src="${r.poster}" loading="lazy" onerror="this.outerHTML='<div class=&quot;cp-ph&quot;>▶</div>'">`:'<div class="cp-ph">▶</div>'}
@@ -527,18 +517,30 @@ function recCard(r,onclickCall){
       <div class="ct" title="${r.title}">${r.title}</div>
       <div class="cm">${meta}</div>
       <div class="cplot">${r.plot||''}</div>
-      ${r.subreddit?`<div class="cm"><a class="reddit-src" href="${r.permalink}" target="_blank" rel="noopener">r/${r.subreddit}</a></div>`:''}
-      <button class="rab ${already?'added':''}" onclick="${onclickCall}">${already?'✓ In list':'+ Watchlist'}</button>
+      <div style="display:flex;gap:5px;margin-top:6px;">
+        <button class="rab ${inList?'added':''}" style="flex:1" onclick="${addFnName}(${i},false)">${inList?'✓ In list':'+ Watchlist'}</button>
+        <button class="rab ${isWatched?'added':''}" style="flex:1" onclick="${addFnName}(${i},true)">${isWatched?'✓ Watched':'Watched'}</button>
+      </div>
     </div>
   </div>`;
 }
 
-async function addFromRecommendation(r){
+async function addFromRecommendation(r, opts={}){
   if(!curPid) return;
   const title=toPC(r.title);
-  if(entries.find(e=>e.title.toLowerCase()===title.toLowerCase())){
-    dupAlert(`"${title}" is already in this profile!`); return;
+  const existing=entries.find(e=>e.title.toLowerCase()===title.toLowerCase());
+
+  if(existing){
+    if(opts.watched && !existing.watched){
+      existing.watched=true; render();
+      await fetch(`/api/entries/${existing.id}`,{method:'PATCH',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({watched:true})});
+      toast('Marked watched: '+title);
+    } else if(!opts.watched){
+      dupAlert(`"${title}" is already in this profile!`);
+    }
+    return;
   }
+
   const res=await fetch(`/api/profiles/${curPid}/entries`,{
     method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
@@ -546,40 +548,19 @@ async function addFromRecommendation(r){
   });
   if(res.status===409){dupAlert(`"${title}" already exists!`);return;}
   const ne=await res.json();
+  const patchBody={type:r.type,genres:r.genres||[],rating:r.rating,year:r.year,poster:r.poster,plot:r.plot};
+  if(opts.watched) patchBody.watched=true;
   const p=await fetch(`/api/entries/${ne.id}`,{
     method:'PATCH',credentials:'include',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({type:r.type,genres:r.genres||[],rating:r.rating,year:r.year,poster:r.poster,plot:r.plot})
+    body:JSON.stringify(patchBody)
   });
   entries.push(await p.json());
   render();
-  toast('Added: '+title);
+  toast(opts.watched?'Added & marked watched: '+title:'Added: '+title);
 }
 
-async function addRecommended(i){ await addFromRecommendation(recs[i]); renderRecs(); }
-async function addRedditPick(i){ await addFromRecommendation(redditPicks[i]); renderReddit(); }
-
-// ── Reddit picks ──────────────────────────────────────────────
-async function loadReddit(subs){
-  const el=document.getElementById('reddit-row');
-  el.innerHTML='<div class="empty" style="padding:16px 0">Loading Reddit picks…</div>';
-  try{
-    const qs=subs?`?subreddits=${encodeURIComponent(subs)}`:'';
-    const r=await fetch(`/api/reddit-picks${qs}`,{credentials:'include'});
-    const data=await r.json();
-    if(!Array.isArray(data)){el.innerHTML='<div class="empty" style="padding:16px 0">Reddit picks unavailable.</div>';return;}
-    redditPicks=data;
-    renderReddit();
-  }catch(e){
-    el.innerHTML='<div class="empty" style="padding:16px 0">Could not load Reddit picks.</div>';
-  }
-}
-
-function renderReddit(){
-  const el=document.getElementById('reddit-row');
-  if(!redditPicks.length){el.innerHTML='<div class="empty" style="padding:16px 0">No verified picks found in those threads right now.</div>';return;}
-  el.innerHTML=redditPicks.map((r,i)=>recCard(r,'addRedditPick('+i+')')).join('');
-}
+async function addRecommended(i,watched){ await addFromRecommendation(recs[i],{watched}); renderRecs(); }
 
 // ── Watch toggle ──────────────────────────────────────────────
 async function toggleWatch(id){
