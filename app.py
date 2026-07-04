@@ -107,6 +107,17 @@ def load_user(user_id):
 def unauthorized():
     return jsonify({"error": "Unauthorized"}), 401
 
+@app.errorhandler(Exception)
+def handle_any_error(e):
+    # Make sure the client always gets JSON back, even on unexpected crashes,
+    # and log the real traceback so we can see what actually failed.
+    import traceback
+    traceback.print_exc()
+    code = getattr(e, "code", 500)
+    if not isinstance(code, int):
+        code = 500
+    return jsonify({"error": str(e) or "Internal server error"}), code
+
 # ── Debug ─────────────────────────────────────────────────────────────────────
 
 @app.route("/api/ping")
@@ -165,7 +176,11 @@ def login():
     username = (data.get("username") or "").strip().lower()
     password = data.get("password", "")
 
-    user = User.query.filter_by(username=username).first()
+    try:
+        user = User.query.filter_by(username=username).first()
+    except Exception as e:
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
+
     if not user or not bcrypt.check_password_hash(user.password, password):
         return jsonify({"error": "Invalid username or password"}), 401
 
@@ -408,7 +423,9 @@ with app.app_context():
     try:
         db.create_all()
     except Exception as e:
+        import traceback
         print("DB init warning:", e)
+        traceback.print_exc()
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
